@@ -1,0 +1,69 @@
+Private Sub CommandButton1_Click()
+'校验正确性
+'设置以下一个变量
+test_score_col = 2  '考试分数的列
+
+gpa_col = test_score_col + 1
+final_score_col = test_score_col + 2
+
+Dim attendance_col, practice_col, phase_col, homework_col
+attendance_col = test_score_col + 4 '考勤列
+practice_col = attendance_col + 1  '课堂实践列
+phase_col = attendance_col + 5 + 2 '阶段测试列
+homework_col = attendance_col + 5 + 5 + 3 '课后作业列
+
+Dim varData As Variant
+
+For j = 2 To ActiveSheet.UsedRange.Rows.Count
+'验证1：gpa总和要相等
+    left_gpa = ActiveSheet.Cells(j, gpa_col)
+    attendance_score = ActiveSheet.Cells(j, attendance_col)
+    practice_score = ActiveSheet.Cells(j, practice_col)
+    phase_score = ActiveSheet.Cells(j, phase_col)
+    homework_score = ActiveSheet.Cells(j, homework_col)
+    right_sum_gpa = (attendance_score + practice_score + phase_score + homework_score) * 2
+    If left_gpa <> right_sum_gpa Then '如果校验不等
+        MsgBox j & "行 left_gpa:" & left_gpa & " not equal right_sum_gpa " & right_sum_gpa
+        ActiveSheet.Cells(j, gpa_col).Interior.Color = RGB(255, 0, 0) '设置为红色
+    End If
+
+'验证2：小项gpa之和要相等
+'验证实践分
+varData = Array(20, 20, 20, 20, 20)
+Call verify_minor_GPA(j, practice_col, varData)
+'验证阶段分
+varData = Array(20, 20, 25, 25, 10)
+Call verify_minor_GPA(j, phase_col, varData)
+'验证课后作业分
+varData = Array(30, 20, 15, 15, 20)
+Call verify_minor_GPA(j, homework_col, varData)
+Next
+
+MsgBox "校验完成.请检查标红的行,如果有的话."
+End Sub
+
+'验证小项gpa
+Sub verify_minor_GPA(row_no, ByVal start_col As Integer, ByRef score_component As Variant)
+x_score = ActiveSheet.Cells(row_no, start_col).Value * 100 / 15 '15是拆分项的满分比例.x_score应该为百分制
+right_sum_score = 0
+For i = LBound(score_component) To UBound(score_component)
+right_sum_score = right_sum_score + ActiveSheet.Cells(row_no, start_col + i + 1)
+Next
+If (x_score - right_sum_score) > 0.000006 Then  '如果不相等
+    MsgBox row_no & "行 小项总和不等.x_score:" & x_score & ". right_sum_score:" & right_sum_score & "列:" & start_col
+    ActiveSheet.Cells(row_no, start_col).Interior.Color = RGB(255, 0, 0) '设置为红色
+End If
+End Sub
+
+'清除所有随机值和样式颜色
+Private Sub CommandButton2_Click()
+'设置以下一个变量
+test_score_col = 2  '考试分数的列
+For i = 2 To ActiveSheet.UsedRange.Rows.Count
+    For j = test_score_col To ActiveSheet.UsedRange.Columns.Count
+        ActiveSheet.Cells(i, j + 1) = ""
+        ActiveSheet.Cells(i, j + 1).Interior.Pattern = xlNone
+    Next
+Next
+End Sub
+

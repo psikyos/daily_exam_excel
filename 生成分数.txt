@@ -1,0 +1,190 @@
+Sub 生成_Click()
+'平时成绩gpa,考试成绩test_score,总分final
+Dim row_cnt, j, test_score_col, gpa_col, final_score_col, upper_bound, lower_bound, assign_gpa_score, std_dev
+'设置以下四个变量
+test_score_col = 2  '考试分数的列
+lower_bound = 60    '平时成绩随机数的下限值,上限值为考试成绩,若考试成绩低于此数,则平时成绩不会高于此下限
+assign_gpa_score = 89 '指定的平时成绩,-1为代码不生成平时成绩
+std_dev = 3 '指定标准差
+
+Dim text_edit_value As Integer
+text_edit_value = ActiveSheet.OLEObjects("test_column_TextBox").Object.Value
+If WorksheetFunction.IsNumber(text_edit_value) Then
+    test_score_col = text_edit_value
+Else
+    MsgBox "test column is not a number."
+    Return
+End If
+
+gpa_col = test_score_col + 1
+final_score_col = test_score_col + 2
+
+Dim attendance_col, practice_col, phase_col, homework_col
+attendance_col = test_score_col + 4 '考勤列
+practice_col = attendance_col + 1  '课堂实践列
+phase_col = attendance_col + 5 + 2 '阶段测试列
+homework_col = attendance_col + 5 + 5 + 3 '课后作业列
+
+
+    Dim varData As Variant
+    varData = Array(20, 30, 40, 20, 10)
+    'Call test_arr(varData)
+    
+For j = 2 To ActiveSheet.UsedRange.Rows.Count
+    'MsgBox ActiveSheet.Cells(j, 2)
+    '设置平时分GPA
+    upper_bound = ActiveSheet.Cells(j, test_score_col)
+    If assign_gpa_score <> -1 Then
+        ActiveSheet.Cells(j, gpa_col) = assign_gpa_score 'Int(Rnd * (upper_bound - lower_bound + 1) + lower_bound)
+    End If
+    
+    '设置总分,写到单元格公式里
+    'ActiveSheet.Cells(j, final_score_col).Value = (ActiveSheet.Cells(j, gpa_col) + ActiveSheet.Cells(j, test_score_col)) / 2
+    ActiveSheet.Cells(j, final_score_col).Value = "=(" & CNtoW(test_score_col) & j & "+" & CNtoW(gpa_col) & j & ")/2"
+
+    '拆分gpa
+    Call split_GPA((ActiveSheet.Cells(j, gpa_col).Value), j, std_dev, (test_score_col))
+    
+    '拆分实践分
+    varData = Array(20, 20, 20, 20, 20)
+    Call split_minor_GPA(j, practice_col, std_dev, varData)
+    '拆分阶段测试分
+    varData = Array(20, 20, 25, 25, 10)
+    Call split_minor_GPA(j, phase_col, std_dev, varData)
+    '拆分课后作业分
+    varData = Array(30, 20, 15, 15, 20)
+    Call split_minor_GPA(j, homework_col, std_dev, varData)
+Next
+End Sub
+
+'测试数组入参,数组共5个元素,从0到4,循环上限是4
+Sub test_arr(ByRef varData As Variant)
+    MsgBox "Data for " & varData(1) & " has been recorded." & UBound(varData)
+For i = LBound(varData) To UBound(varData)
+MsgBox varData(i)
+Next
+End Sub
+
+'拆分小项的分
+Sub split_minor_GPA(row_no, ByVal start_col As Integer, std_dev, ByRef score_component As Variant)
+x_score = ActiveSheet.Cells(row_no, start_col).Value * 100 / 15 '15是拆分项的满分比例.x_score应该为百分制
+item_cnt = UBound(score_component) + 1 '数组共5个元素,从0到4,循环上限是4,所以总数要加1
+ReDim score_ori_arr(UBound(score_component)) As Variant '动态数组使用redim,原始分数
+ReDim score_arr(UBound(score_component)) As Variant '调整分数
+ReDim diff_arr(UBound(score_component)) As Variant '分数差距
+'先平均分配各分
+For i = LBound(score_component) To UBound(score_component)
+    score_ori_arr(i) = x_score * score_component(i) / 100 '满分是100
+Next
+
+'调整
+For i = LBound(score_component) To UBound(score_component)
+    '偶数列取随机值
+    If i Mod 2 = 0 Then
+        score_arr(i) = Int(RndNorm1((score_ori_arr(i)), (std_dev)))
+        diff_arr(i) = score_ori_arr(i) - score_arr(i)
+    ElseIf i Mod 2 = 1 Then '奇数列补充差距
+        score_arr(i) = Application.Floor(score_ori_arr(i) + diff_arr(i - 1), 0.5)
+    End If
+    
+    '最后一列补全所有的差距
+    If (i = UBound(score_component)) Then
+        score_arr(i) = 0
+        For j = LBound(score_component) To UBound(score_component) - 1
+            score_arr(i) = score_arr(i) + (score_ori_arr(j) - score_arr(j))
+        Next
+        score_arr(i) = score_arr(i) + score_ori_arr(i)
+    End If
+Next
+
+'最终赋值
+For i = LBound(score_component) To UBound(score_component)
+    ActiveSheet.Cells(row_no, start_col + i + 1) = score_arr(i)
+Next
+End Sub
+
+'入参平时成绩gpa,考试分数所在列test_score_col,行号row_no
+Sub split_GPA(gpa_score, row_no, std_dev, test_score_col)
+'平时成绩拆分到4个得分上
+Dim attend_score, practice_score, phase_score, homework_score, redo_cnt, ori_prac_score, diff, ori_phase_score, ori_homework_score
+
+attendance_col = test_score_col + 4 '考勤列
+practice_col = attendance_col + 1  '课堂实践列
+phase_col = attendance_col + 5 + 2 '阶段测试列
+homework_col = attendance_col + 5 + 5 + 3 '课后作业列
+
+attendance_score = 5 'gpa_score * 0.05
+practice_score = gpa_score * 0.15
+phase_score = gpa_score * 0.15
+homework_score = gpa_score / 2 - attendance_score - practice_score - phase_score
+
+'If (gpa_score < 90 And gpa_score > 10) Then    '提高性能,可以缩小范围
+If Not (gpa_score = 100 Or gpa_score = 0) Then  '如果gpa不是唯一解,即100分和0分,则可以调整
+    redo_cnt = 0
+    ori_prac_score = practice_score
+    ori_phase_score = phase_score
+    ori_homework_score = homework_score
+    upper_bound = ori_prac_score + std_dev
+    lower_bound = ori_prac_score - std_dev
+    Do While 1
+        'practice_score = Int(Rnd * (upper_bound - lower_bound + 1) + lower_bound)
+        practice_score = Int(RndNorm1((ori_prac_score), (std_dev)))
+        diff = ori_prac_score - practice_score '差异值
+
+        phase_score = Application.Floor(ori_phase_score + diff / 2, 0.5)
+        'homework_score = Application.Floor(ori_homework_score + diff / 2, 0.5)
+        homework_score = (ori_prac_score + ori_phase_score) - practice_score - phase_score + ori_homework_score
+        If redo_cnt > 10 Then
+            MsgBox "第" & (row_no) & " 行重试次数大于10，退出"
+            Exit Do
+        End If
+        If ((practice_score >= 0 And practice_score <= 15) And (phase_score >= 0 And phase_score <= 15) And (homework_score >= 0 And homework_score <= 15)) Then
+            Exit Do
+        Else
+            redo_cnt = redo_cnt + 1
+            'MsgBox practice_score & "\n " & phase_score & "\n " & homework_score
+        End If
+    Loop
+End If
+
+'最终赋值
+ActiveSheet.Cells(row_no, attendance_col) = attendance_score
+ActiveSheet.Cells(row_no, practice_col) = practice_score
+ActiveSheet.Cells(row_no, phase_col) = phase_score
+ActiveSheet.Cells(row_no, homework_col) = homework_score
+
+End Sub
+
+'正态生成器1
+Function RndNorm1(Mean As Double, Std As Double)
+    Dim V1 As Double, V2 As Double, r As Double
+    Do
+        V1 = 2 * Rnd - 1
+        V2 = 2 * Rnd - 1
+        r = V1 ^ 2 + V2 ^ 2
+    Loop Until r < 1
+    
+    RndNorm1 = Mean + V2 * Sqr(-2 * Log(r) / r) * Std
+End Function
+
+'正态生成器2
+Function RndNorm2(Mean As Double, Std As Double)
+    Const PI As Double = 3.1415926
+    Dim V1 As Double, V2 As Double
+    Do
+        V1 = Rnd
+        V2 = Rnd
+    Loop Until V1 > 0
+    
+    RndNorm2 = Mean + Sqr(-2 * Log(V1)) * Cos(2 * PI * V2) * Std
+End Function
+'列号,列数转字母,比如第3列转C列
+Function CNtoW(ByVal num As Long) As String
+CNtoW = Replace(Cells(1, num).Address(False, False), "1", "")
+End Function
+
+'字母转列数
+Function CWtoN(ByVal AB As String) As Long
+CWtoN=Range("a1:"&AB&"1").Cells.Count
+End Function
+
